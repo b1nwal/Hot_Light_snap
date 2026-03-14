@@ -1,18 +1,30 @@
 from fltk import *
+import socket
+import threading
 
 x = 100
 y = 100
 width = 1000
 height = 1000
 
+temp = 0
+
+def r(gui, cont):
+    while 1:
+        msg = cont.socket.recv(1024).decode('utf-8')
+        print(msg)
+        global temp
+        temp = msg
+
 class Controller:
 
-    def __init__(self):
+    def __init__(self, socket):
         self.lights_on = False
         self.heating_on = False
-
+        self.socket = socket
     def toggle_lights(self):
         self.lights_on = not self.lights_on
+        # self.socket.send(b'OP1 LIGHT_'+(b'ON' if self.lights_on else b'OFF'))
 
     def toggle_heating(self):
         self.heating_on = not self.heating_on
@@ -43,7 +55,7 @@ class LightGUI:
         self.occupancy_box.labelsize(20)
 
         # Temperature metre
-        self.temperature_box = Fl_Box(int(width*0.275), int(height*0.3), int(width*0.275), int(height*0.3), "Temperature")
+        self.temperature_box = Fl_Box(int(width*0.275), int(height*0.3), int(width*0.275), int(height*0.3), "Temperature: ")
         self.temperature_box.box(FL_UP_BOX)
         self.temperature_box.labelsize(20)
 
@@ -71,6 +83,10 @@ class LightGUI:
 
 
     def toggle_lights(self, widget):
+        global temp
+        temp = ""
+
+        self.temperature_box = Fl_Box(int(width*0.275), int(height*0.3), int(width*0.275), int(height*0.3), "Temperature: "+temp)
 
         self.controller.toggle_lights()
 
@@ -104,9 +120,13 @@ class LightGUI:
 
 
 if __name__ == "__main__":
+    sock = socket.socket()
+    # sock.connect(("192.168.4.1", 8080))
 
-    controller = Controller()
+    controller = Controller(sock)
 
     gui = LightGUI(controller)
+    # t = threading.Thread(target=r, args=(gui,controller))
+    # t.start()
 
     gui.run()
