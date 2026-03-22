@@ -5,7 +5,7 @@ import threading
 x = 100
 y = 100
 width = 1000
-height = 1000
+height = 800
 
 temp = 0
 
