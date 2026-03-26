@@ -82,6 +82,7 @@ class Pico:
 #   OP0 : EXIT
 #   OP1 : SIMPLEX COMMAND
 #   OP2 : DUPLEX COMMAND (QUESTION AND RESPONSE) 
+#   OP3 : 
 def proc_msg(_msg,conn): 
     r_flag=True
     msg=_msg.decode('utf-8')
