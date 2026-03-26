@@ -50,19 +50,25 @@ class Controller:
     def toggle_heating(self):
         self.heating_on = not self.heating_on
 
+    def update_auto(self):
+        self.sock.send("OP1 AUTO_"+("ON" if self.automated else "OFF"))
+    
     def change_temp(self, temp):
         Fl.remove_timeout(self.send_temp)
         self.target_temp = temp
         Fl.add_timeout(.3, self.send_temp, temp)
 
     def send_temp(self, temp):
-        self.sock.send("OP1 TEMP_SET " + str(temp))
+        if self.sock.connected:
+            self.sock.send("OP1 TEMP_SET " + str(temp))
 
     def connect(self):
         self.sock.connect()
         if self.sock.connected:
             info = self.sock.request_all_info()
+            self.target_temp = float(info[0][16:])
             self.occupied = info[1]=="OP2 OCC True"
+            self.automated = info[2]=="OP2 AUTO True"
         return self.sock.connected
 
 
@@ -102,10 +108,6 @@ class LightGUI:
         self.occupancy_value.labelsize(30)
         self.occupancy_value.labelfont(FL_BOLD)
         #self.occupancy_value.align(FL_ALIGN_CENTRE)
-
-        # occupancy button
-        self.occupancy_button = Fl_Button(0, 0, 0, 0, "Toggle Occupancy")
-        self.occupancy_button.callback(self.toggle_occupancy)
 
         # Temperature box
         self.temperature_box = Fl_Box(0, 0, 0, 0)
@@ -339,7 +341,6 @@ class LightGUI:
 
         # occupancy components
         self.occupancy_value.resize(int(w*0.06), int(h*0.4), int(w*0.15), int(h*0.1))
-        self.occupancy_button.resize(int(w*0.05), int(h*0.55), int(w*0.18), int(h*0.05))
 
         # automation components
         self.automation_checkbox.resize(int(w*0.65), int(h*0.884), int(w*0.02), int(h*0.025))
@@ -367,11 +368,12 @@ class LightGUI:
             self.automation_overview.label("AUTOMATED")
         else:
             self.automation_overview.label("MANUAL")
-
+        self.controller.update_auto()
         self.automation_overview.redraw()
 
     def toggle_automation(self, widget):
         self.controller.automated = bool(widget.value())
+        
         self.update_automation()
 
     def toggle_lights(self, widget):
@@ -453,8 +455,18 @@ class LightGUI:
         self.temp_schedule_value.redraw()
 
     def connect(self, widget):
-        status = self.controller.connect()
-        self.status_box.label(("Online" if status else "Offline"))
+        if self.controller.sock.connected: return
+        if self.controller.connect(): # this is tech
+            # Fl.delete_widget(widget)
+            self.status_box.label("Online")
+            # update temp
+            self.temp_input.value(self.controller.target_temp)
+            self.temp_roller.value(self.controller.target_temp)
+            # update occupancy
+            self.update_occupancy()
+            # update automode
+            self.update_automation()
+
 
 class Sock:
     def __init__(self):
@@ -470,23 +482,27 @@ class Sock:
                 print("success!")
                 self.connected = True
             else:
-                print("Pico Refused Connection")
-                self.s.shutdown(socket.SHUT_RDWR) # no idea why it won't just shut the fuck up about this
+                exit()
+
         except:
             self.connected = False
-            
+
     def disconnect(self): # should only run at end of program life
-        self.send("OP0 EXIT")
-        self.s.close()
+        if self.connected:
+            self.send("OP0 EXIT")
+            self.s.close()
 
     def send(self, msg):
-        self.s.send(bytes(msg, 'utf-8'))
+        if self.connected:
+            self.s.send(bytes(msg, 'utf-8'))
 
     def request_all_info(self):
         info = []
-        self.s.send(b"OP2 TEMP?")
+        self.s.send(b"OP2 TEMP_TARGET?")
         info.append(str(self.s.recv(1024),'utf-8'))
         self.s.send(b"OP2 OCC?")
+        info.append(str(self.s.recv(1024),'utf-8'))
+        self.s.send(b"OP2 AUTO?")
         info.append(str(self.s.recv(1024),'utf-8'))
         return info
 if __name__ == "__main__":
