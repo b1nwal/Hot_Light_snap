@@ -8,9 +8,9 @@ import _thread
 HOST="192.168.4.1"
 PORT=8080
 
-HC_HEAT_DEFAULT=21 #adjust default target temp here (make sure it aligns with control software?)
+HC_HEAT_DEFAULT=21.0 #adjust default target temp here (make sure it aligns with control software?)
 HC_BAND_DEFAULT=.5
-HC_S_OFFSET=5
+HC_S_OFFSET=5.0
 
 ap=network.WLAN(network.AP_IF)
 ap.config(essid='HLS',password='hotlightsnap')
@@ -78,28 +78,38 @@ class Pico:
         self.occ=self.pir.get_current()
         return self.occ
 
+def send(conn,t): # small helper function
+    conn.send(bytes(t,'utf-8'))
+
 ### OPCODE DOCUMENTATION
-#   OP0 : EXIT
+#   OP0 : ENTER/EXIT
 #   OP1 : SIMPLEX COMMAND
 #   OP2 : DUPLEX COMMAND (QUESTION AND RESPONSE) 
 #   OP3 : 
+
 def proc_msg(_msg,conn): 
     r_flag=True
     msg=_msg.decode('utf-8')
     print("recv:",msg)
     if not msg: r_flag=False #catastrophic exit
-    if "OP0" in msg: #unilateral exit
-        r_flag=False
+    if "OP0" in msg:
+        if "ENTER" in msg:
+            send(conn,"OP0 ENTER")
+        elif "EXIT" in msg:
+            r_flag=False
     elif "OP1" in msg: #simplex command
         if "LIGHT_ON" in msg:
-            pico.led_pin.value(1) #currently not stateful, this might cause problems later
+            pico.led_pin.value(1) # this may be changed later to ack system to prevent misalignment
         elif "LIGHT_OFF" in msg:
             pico.led_pin.value(0)
+        elif "TEMP_SET" in msg:
+            print("updating temperature")
+            pico.heater.target = float(msg[13:])
     elif "OP2" in msg: #duplex command (send answer form here, question form on ui)
         if "TEMP?" in msg:
-            conn.send(bytes("OP2 TEMP "+str(pico.temperature()),'utf-8')) #basically just shorthand for calling pico.temperature() on the line above and using pico.temp here
+            send(conn,"OP2 TEMP "+str(pico.temperature())) #basically just shorthand for calling pico.temperature() on the line above and using pico.temp here
         elif "OCC?" in msg:
-            conn.send(bytes("OP2 OCC "+str(pico.occ_guess),'utf-8')) #occ_guess should be constantly updated anyway, but technically for symmetry I guess I should have a function for updating it?
+            send(conn,"OP2 OCC "+str(pico.occ_guess)) #occ_guess should be constantly updated anyway, but technically for symmetry I guess I should have a function for updating it?
     return r_flag
 
 def _control_loop(pico): #use the pico state to update the pico state on a loop
