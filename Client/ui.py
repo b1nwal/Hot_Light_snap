@@ -2,20 +2,33 @@ from fltk import *
 
 x = 100
 y = 100
-width = 500
-height = 500
+width = 800
+height = 800
 
 TEMP_MIN = 10
 TEMP_MAX = 90
 
 class MyWindow(Fl_Window):
+    def __init__(self, x, y, w, h, t, controller):
+        super().__init__(x,y,w,h,t)
+        self.controller = controller
+        self.gui = LightGUI(controller)
+        self.end()
+        self.resizable(self)
+        
     def resize(self, x, y, w, h):
         super().resize(x, y, w, h)
-        self.gui.layout(w, h)
+        self.layout(w, h)
+
+    def run(self):
+        self.show()
+        Fl.run()
+    def layout(self, w, h):
+        self.gui.layout(w,h)
+        self.redraw()
 
 
 class Controller:
-
     def __init__(self):
         self.lights_on = False
         self.heating_on = False
@@ -29,19 +42,15 @@ class Controller:
     def toggle_heating(self):
         self.heating_on = not self.heating_on
 
-    def set_target_temp(self, temp):
+    def change_temp(self, widget): # why is this in LightGUI and not controller?
+        temp = widget.value()
         self.target_temp = temp
 
 
 class LightGUI:
-
     def __init__(self, controller):
 
         self.controller = controller
-
-        # window
-        self.window = MyWindow(x, y, width, height, "LED Control")
-        self.window.gui = self
        
         # top header
         self.title_box = Fl_Box(0, 0, 0, 0, "Heating + Lighting Integrated System // System Online")
@@ -245,9 +254,6 @@ class LightGUI:
 
         # clean up title bg if i choose to do so
 
-        self.window.end()
-        self.window.resizable(self.window)
-
         self.layout(width, height)
         self.update_occupancy()
         self.update_automation()
@@ -315,8 +321,6 @@ class LightGUI:
         self.automation_checkbox.resize(int(w*0.65), int(h*0.884), int(w*0.02), int(h*0.025))
         self.automation_status.resize(int(w*0.7), int(h*0.87), int(w*0.15), int(h*0.05))
 
-        self.window.redraw()
-
     def update_occupancy(self):
         if self.controller.occupied:
             self.occupancy_value.label("YES")
@@ -378,7 +382,7 @@ class LightGUI:
 
         self.heat_box.redraw()
 
-    def change_temp(self, widget):
+    def change_temp(self, widget): # why is this in LightGUI and not controller?
         temp = widget.value()
         self.controller.target_temp = temp
         self.temp_input.value(temp)
@@ -424,15 +428,8 @@ class LightGUI:
         self.temp_schedule_value.redraw()
 
 
-    def run(self):
-        self.window.show()
-        Fl.run()
-
-
 if __name__ == "__main__":
 
     controller = Controller()
-
-    gui = LightGUI(controller)
-
-    gui.run()
+    win = MyWindow(x, y, width, height, "LED Control", controller)
+    win.run()
