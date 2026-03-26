@@ -1,12 +1,18 @@
 from fltk import *
+import time
+import threading
+import socket
 
 x = 100
 y = 100
-width = 800
+width = 1000
 height = 800
 
 TEMP_MIN = 10
 TEMP_MAX = 90
+
+HOST_IP = "192.168.4.1"
+HOST_PORT = 8080
 
 class MyWindow(Fl_Window):
     def __init__(self, x, y, w, h, t, controller):
@@ -23,18 +29,20 @@ class MyWindow(Fl_Window):
     def run(self):
         self.show()
         Fl.run()
+
     def layout(self, w, h):
         self.gui.layout(w,h)
         self.redraw()
 
 
 class Controller:
-    def __init__(self):
+    def __init__(self, sock):
         self.lights_on = False
         self.heating_on = False
         self.occupied = False
         self.automated = False
         self.target_temp = 21.0
+        self.sock = sock
 
     def toggle_lights(self):
         self.lights_on = not self.lights_on
@@ -42,25 +50,41 @@ class Controller:
     def toggle_heating(self):
         self.heating_on = not self.heating_on
 
-    def change_temp(self, widget): # why is this in LightGUI and not controller?
-        temp = widget.value()
+    def change_temp(self, temp):
+        Fl.remove_timeout(self.send_temp)
         self.target_temp = temp
+        Fl.add_timeout(.3, self.send_temp, temp)
+
+    def send_temp(self, temp):
+        self.sock.send("OP1 TEMP_SET " + str(temp))
+
+    def connect(self):
+        self.sock.connect()
+        if self.sock.connected:
+            info = self.sock.request_all_info()
+            self.occupied = info[1]=="OP2 OCC True"
+        return self.sock.connected
 
 
 class LightGUI:
+    # why isn't there a display for current temp???
     def __init__(self, controller):
 
         self.controller = controller
        
         # top header
-        self.title_box = Fl_Box(0, 0, 0, 0, "Heating + Lighting Integrated System // System Online")
+        self.title_box = Fl_Box(0, 0, 0, 0, "Heating + Lighting Integrated System")
         self.title_box.box(FL_UP_BOX)
         self.title_box.labelsize(20)
 
         # second header
-        self.overview_box = Fl_Box(0, 0, 0, 0, "Overview")
-        self.overview_box.box(FL_UP_BOX)
-        self.overview_box.labelsize(25)
+        self.status_box = Fl_Box(0, 0, 0, 0, "Offline")
+        self.status_box.box(FL_UP_BOX)
+        self.status_box.labelsize(25)
+        
+        # status button
+        self.status_button = Fl_Button(0, 0, 0, 0, "Connect")
+        self.status_button.callback(self.connect)
 
         # occupancy box
         self.occupancy_box = Fl_Box(0, 0, 0, 0)
@@ -220,7 +244,7 @@ class LightGUI:
         self.automation_box.labelsize(20)
 
         # automation box title
-        self.automation_title = Fl_Box(0, 0, 0, 0, "Turn Automated Mode on?")
+        self.automation_title = Fl_Box(0, 0, 0, 0, "Mode")
         self.automation_title.box(FL_FLAT_BOX)
         self.automation_title.labelsize(20)
 
@@ -229,10 +253,10 @@ class LightGUI:
         self.automation_checkbox.callback(self.toggle_automation)
 
         # automation label
-        self.automation_status = Fl_Box(0, 0, 0, 0, "MANUAL")
-        self.automation_status.box(FL_FLAT_BOX)
-        self.automation_status.labelsize(20)
-        self.automation_status.labelfont(FL_BOLD)
+        self.automation_overview = Fl_Box(0, 0, 0, 0, "MANUAL")
+        self.automation_overview.box(FL_FLAT_BOX)
+        self.automation_overview.labelsize(20)
+        self.automation_overview.labelfont(FL_BOLD)
 
         # manual light box
         self.light_box = Fl_Box(0, 0, 0, 0, "Lights Manual Switch")
@@ -264,7 +288,7 @@ class LightGUI:
     def layout(self, w, h):
         # headers
         self.title_box.resize(int(0), int(0), int(w), int(h*0.1))
-        self.overview_box.resize(int(0), int(h*0.1), int(w), int(h*0.15))
+        self.status_box.resize(int(0), int(h*0.1), int(w), int(h*0.15))
 
         # info boxes
         self.occupancy_box.resize(int(w*0.025), int(h*0.3), int(w*0.225), int(h*0.3))
@@ -319,7 +343,10 @@ class LightGUI:
 
         # automation components
         self.automation_checkbox.resize(int(w*0.65), int(h*0.884), int(w*0.02), int(h*0.025))
-        self.automation_status.resize(int(w*0.7), int(h*0.87), int(w*0.15), int(h*0.05))
+        self.automation_overview.resize(int(w*0.7), int(h*0.87), int(w*0.15), int(h*0.05))
+
+        # status button ?
+        self.status_button.resize(int(w*0.75), int(h*0.15), int(w*0.18), int(h*0.05))
 
     def update_occupancy(self):
         if self.controller.occupied:
@@ -337,13 +364,11 @@ class LightGUI:
 
     def update_automation(self):
         if self.controller.automated:
-            self.automation_status.label("AUTOMATED")
-            #self.automation_status.labelcolor(FL_GREEN)
+            self.automation_overview.label("AUTOMATED")
         else:
-            self.automation_status.label("MANUAL")
-            #self.automation_status.labelcolor(FL_RED)
+            self.automation_overview.label("MANUAL")
 
-        self.automation_status.redraw()
+        self.automation_overview.redraw()
 
     def toggle_automation(self, widget):
         self.controller.automated = bool(widget.value())
@@ -382,9 +407,9 @@ class LightGUI:
 
         self.heat_box.redraw()
 
-    def change_temp(self, widget): # why is this in LightGUI and not controller?
+    def change_temp(self, widget):
         temp = widget.value()
-        self.controller.target_temp = temp
+        self.controller.change_temp(temp)
         self.temp_input.value(temp)
         self.temp_roller.value(temp)
 
@@ -427,9 +452,46 @@ class LightGUI:
 
         self.temp_schedule_value.redraw()
 
+    def connect(self, widget):
+        status = self.controller.connect()
+        self.status_box.label(("Online" if status else "Offline"))
 
+class Sock:
+    def __init__(self):
+        self.s = socket.socket()
+        self.s.settimeout(2)
+        self.connected = False
+    
+    def connect(self):
+        try:
+            self.s.connect((HOST_IP, HOST_PORT))
+            self.s.send(b"OP0 ENTER")
+            if self.s.recv(1024) == b"OP0 ENTER":
+                print("success!")
+                self.connected = True
+            else:
+                print("Pico Refused Connection")
+                self.s.shutdown(socket.SHUT_RDWR) # no idea why it won't just shut the fuck up about this
+        except:
+            self.connected = False
+            
+    def disconnect(self): # should only run at end of program life
+        self.send("OP0 EXIT")
+        self.s.close()
+
+    def send(self, msg):
+        self.s.send(bytes(msg, 'utf-8'))
+
+    def request_all_info(self):
+        info = []
+        self.s.send(b"OP2 TEMP?")
+        info.append(str(self.s.recv(1024),'utf-8'))
+        self.s.send(b"OP2 OCC?")
+        info.append(str(self.s.recv(1024),'utf-8'))
+        return info
 if __name__ == "__main__":
-
-    controller = Controller()
+    sock = Sock()
+    controller = Controller(sock)
     win = MyWindow(x, y, width, height, "LED Control", controller)
     win.run()
+    sock.disconnect()
