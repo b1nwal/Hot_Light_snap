@@ -1,4 +1,4 @@
-# Hot_Light_snap
+# Hot Light snap
 ## Summary
 This is a demo prototype project for an integrated heating/lighting building management system (hereafter **BMS**) developed by Spiders Georg (engineering design team.) The assignment was to create a project that addressed an RFP submitted by UVic facilities management to integrate building systems (such as security, fire, heating, lighting, water, etc.) into a single BMS that would enable relative ease in controlling and administartion, as well as modular expandability for future upgrades. 
 
