@@ -46,9 +46,11 @@ class Controller:
 
     def toggle_lights(self):
         self.lights_on = not self.lights_on
+        self.sock.send("OP1 LIGHT_"+("ON" if self.lights_on else "OFF"))
 
     def toggle_heating(self):
         self.heating_on = not self.heating_on
+        self.sock.send("OP1 HEAT_"+("ON" if self.heating_on else "OFF"))
 
     def update_auto(self):
         self.sock.send("OP1 AUTO_"+("ON" if self.automated else "OFF"))
@@ -59,9 +61,22 @@ class Controller:
         Fl.add_timeout(.3, self.send_temp, temp)
 
     def send_temp(self, temp):
+        self.sock.send("OP1 TEMP_SET " + str(temp))
+    def update_occupancy(self):
         if self.sock.connected:
-            self.sock.send("OP1 TEMP_SET " + str(temp))
-
+            self.sock.send("OP2 OCC?")
+            try:
+                self.occupied = self.sock.s.recv(1024)==b"OP2 OCC True"
+            except:
+                print("no idea what the problem even is")
+    def update_lightstat(self):
+        if self.sock.connected:
+            self.sock.send("OP2 LIGHT_STAT?")
+            self.lights_on = self.sock.s.recv(1024)==b"OP2 LIGHT_STAT ON"
+    def update_heatstat(self):
+        if self.sock.connected:
+            self.sock.send("OP2 HEAT_STAT?")
+            self.heating_on = self.sock.s.recv(1024)==b"OP2 HEAT_STAT ON"
     def connect(self):
         self.sock.connect()
         if self.sock.connected:
@@ -78,6 +93,8 @@ class LightGUI:
 
         self.controller = controller
        
+        self.loop = Fl.add_timeout(1,self.loop_update)
+
         # top header
         self.title_box = Fl_Box(0, 0, 0, 0, "Heating + Lighting Integrated System")
         self.title_box.box(FL_UP_BOX)
@@ -261,7 +278,7 @@ class LightGUI:
         self.automation_overview.labelfont(FL_BOLD)
 
         # manual light box
-        self.light_box = Fl_Box(0, 0, 0, 0, "Lights Manual Switch")
+        self.light_box = Fl_Box(0, 0, 0, 0, "Lights OFF")
         self.light_box.box(FL_UP_BOX)
         self.light_box.labelsize(20)
         
@@ -270,7 +287,7 @@ class LightGUI:
         self.light_button.callback(self.toggle_lights)
 
         # manual heat box
-        self.heat_box = Fl_Box(0, 0, 0, 0, "Heating Manual Switch")
+        self.heat_box = Fl_Box(0, 0, 0, 0, "Heating OFF")
         self.heat_box.box(FL_UP_BOX)
         self.heat_box.labelsize(20)
 
@@ -286,6 +303,27 @@ class LightGUI:
         self.update_light_schedule(None)
         self.update_temp_schedule(None)
 
+    def loop_update(self):
+        self.update_occupancy()
+        self.controller.update_lightstat()
+        self.controller.update_heatstat()
+        if self.controller.lights_on:
+            self.light_box.label("Lights ON")
+            self.light_box.color(FL_YELLOW)
+        else:
+            self.light_box.label("Lights OFF")
+            self.light_box.color(FL_GRAY)
+        self.light_box.redraw()
+        self.light_button.redraw()
+        if self.controller.heating_on:
+            self.heat_box.label("Heating ON")
+            self.heat_box.color(fl_rgb_color(255, 154, 0))
+        else:
+            self.heat_box.label("Heating OFF")
+            self.heat_box.color(FL_GRAY)
+        self.heat_box.redraw()
+        self.heat_button.redraw()
+        Fl.add_timeout(1,self.loop_update)
 
     def layout(self, w, h):
         # headers
@@ -350,6 +388,7 @@ class LightGUI:
         self.status_button.resize(int(w*0.75), int(h*0.15), int(w*0.18), int(h*0.05))
 
     def update_occupancy(self):
+        self.controller.update_occupancy()
         if self.controller.occupied:
             self.occupancy_value.label("YES")
             #self.occupancy_value.labelcolor(FL_GREEN)
@@ -479,7 +518,6 @@ class Sock:
             self.s.connect((HOST_IP, HOST_PORT))
             self.s.send(b"OP0 ENTER")
             if self.s.recv(1024) == b"OP0 ENTER":
-                print("success!")
                 self.connected = True
             else:
                 exit()
