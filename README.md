@@ -25,5 +25,5 @@ The lighting control is handled by a PI controller. This functions by adjusting 
 Testing was conducted primarily for testing sensor function and network connectivity. By sending a particular coded message to the Pico server API Layer, you can confirm you have established a mutual connection and the pico is waiting for commands. Similar testing was conducted to confirm that the Pico could retrieve, store, and send sensor data in response to commands. Finally, a very important series of tests regarding reliable remote control of the relay commanding 1100 Watts of mains electricity going into the element was conducted. These tests very thoroughly examined each edge case (disconnecting during or after message send, automatic mode override, temperature target shift) in order to ensure that there could be no dangerous situations like uncontrolled, rapidly increasing temperatures where a zombied connection exists, not capable of immediately disconnecting the heater if the device is in manual mode. 
 
 ## Contributors
-Reilley Pfrimmer \\
+Reilley Pfrimmer  
 M. H.
